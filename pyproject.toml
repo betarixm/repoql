@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "repoql"
+version = "0.1.0"
+description = ""
+authors = ["Minjae Gwon <beta.underalpha@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pygit2 = "^1.14.1"
+
+
+[tool.poetry.group.dev.dependencies]
+pyright = "^1.1.352"
+black = "^24.2.0"
+isort = "^5.13.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
