@@ -3,6 +3,7 @@ from typing import Any, Iterator, Literal, Optional, overload
 
 from pygit2.enums import (  # pyright: ignore[reportMissingTypeStubs]
     ApplyLocation,
+    BlameFlag,
     BranchType,
     DiffFind,
     DiffFlag,
@@ -359,6 +360,18 @@ class Repository:
     def apply(
         self, diff: Diff, location: ApplyLocation = ApplyLocation.WORKDIR
     ) -> None: ...
+    def blame(
+        self,
+        path: str,
+        flags: BlameFlag = BlameFlag.NORMAL,
+        min_match_characters: int | None = None,
+        newest_commit: Oid | None = None,
+        oldest_commit: Oid | None = None,
+        min_line: int | None = None,
+        max_line: int | None = None,
+    ) -> Blame: ...
+    def __iter__(self) -> Iterator[Object]: ...
+    def __len__(self) -> int: ...
     def cherrypick(self, id: _OidArg) -> None: ...
     def compress_references(self) -> None: ...
     def create_blob(self, data: bytes) -> Oid: ...
@@ -570,3 +583,29 @@ def reference_is_valid_name(refname: str) -> bool: ...
 def tree_entry_cmp(a: Object, b: Object) -> int: ...
 
 _OidArg = str | Oid
+
+class Blame:
+    def __del__(self) -> None: ...
+    def __len__(self) -> int: ...
+    def __getitem__(self, index: int) -> BlameHunk: ...
+    def for_line(self, line_no: int) -> BlameHunk: ...
+    def __iter__(self) -> Iterator[BlameHunk]: ...
+
+class BlameHunk:
+
+    lines_in_hunk: int
+    """Number of lines"""
+    boundary: bool
+    """Tracked to a boundary commit"""
+    final_start_line_number: int
+    """Final start line number"""
+    final_committer: Signature | None
+    """Final committer"""
+    final_commit_id: Oid
+    orig_start_line_number: int
+    """Origin start line number"""
+    orig_committer: Signature | None
+    """Original committer"""
+    orig_commit_id: Oid
+    orig_path: str | None
+    """Original path"""
