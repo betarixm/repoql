@@ -1,11 +1,30 @@
 import logging
 from itertools import chain
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Callable, Iterator
 
-from pygit2 import Blob, Commit, Object, Repository, Tree
+from pygit2 import Blame, BlameHunk, Blob, Commit, Object, Oid, Repository, Tree
 
 from repoql.blob_relation.models import BlobRelation
+from repoql.fp import compose, pipe
+from repoql.query import Query as Q
+from repoql.query.protocols import Queryable
+
+
+def from_blame(blame: Blame, commit_by_object_id: Callable[[Oid], Commit]):
+    return pipe(
+        map(lambda hunk: from_hunk(hunk, commit_by_object_id), blame),
+        Q.unique(lambda blob: blob.id),
+        Q.ungroup,
+    )
+
+
+def from_hunk(hunk: BlameHunk, commit_by_object_id: Callable[[Oid], Commit]):
+    assert hunk.orig_path is not None
+
+    return _blob_by_path_in_commit(
+        hunk.orig_path, commit_by_object_id(hunk.orig_commit_id)
+    )
 
 
 def from_repository(
@@ -56,4 +75,17 @@ def from_blob(blob: Blob, commit: Commit, path: Path) -> BlobRelation:
         id=blob.id,
         path=path,
         commit=commit,
+    )
+
+
+def _blob_by_path_in_commit(path: Path | str, commit: Commit):
+    return next(_blob_by_path(path)(from_object(commit)))
+
+
+def _blob_by_path(
+    path: Path | str,
+) -> Callable[[Queryable[BlobRelation, Any]], Iterator[BlobRelation]]:
+    return compose(
+        Q.select(where=lambda blob: str(blob.path) == str(path), limit=1),
+        Q.ungroup,
     )
