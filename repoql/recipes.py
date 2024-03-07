@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from pygit2 import Repository
+from pygit2 import Blame, Repository
 
 from repoql import BlobRelation
 from repoql import Query as Q
@@ -44,9 +44,20 @@ def blobs_by_unique_paths(
     )
 
 
+sort_by_commit_time: Callable[
+    [Queryable[BlobRelation, Any]], Queryable[BlobRelation, Any]
+] = Q.sorted(key=lambda blob: blob.commit.commit_time)
+
+
 def trajectories_of_active_files(
     repository: Repository,
 ) -> Iterator[Iterator[BlobRelation]]:
+    from_blame: Callable[[Blame], Iterator[BlobRelation]] = compose(
+        lambda blame: blob_relation.from_blame(blame, commit_by_object_id(repository)),
+        sort_by_commit_time,
+        Q.ungroup,
+    )
+
     blobs_on_head = blob_relation.from_object(repository.head.peel(1))
 
     paths = map(str, unique_paths(blobs_on_head))
@@ -54,6 +65,6 @@ def trajectories_of_active_files(
     blames = map(repository.blame, paths)
 
     return map(
-        lambda blame: blob_relation.from_blame(blame, commit_by_object_id(repository)),
+        from_blame,
         blames,
     )
