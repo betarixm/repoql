@@ -8,10 +8,53 @@ from pygit2 import Blame, BlameHunk, Blob, Commit, Object, Oid, Repository, Tree
 from repoql.blob_relation.models import BlobRelation
 from repoql.fp import compose, pipe
 from repoql.query import Query as Q
-from repoql.query.protocols import Queryable
+from repoql.query import Queryable
 
 
-def from_blame(blame: Blame, commit_by_object_id: Callable[[Oid], Commit]):
+def from_path_and_commit_ids(
+    path: Path, commit_ids: list[str], repository: Repository
+) -> Iterator[BlobRelation]:
+    commits = map(
+        lambda x: repository.revparse_single(x).peel(1),
+        commit_ids,
+    )
+
+    return (
+        _
+        for _ in map(
+            lambda commit: _from_commit_and_path_silently(commit, path),
+            commits,
+        )
+        if _ is not None
+    )
+
+
+def _from_commit_and_path_silently(
+    commit: Commit,
+    path: Path,
+):
+    try:
+        return from_commit_and_path(commit, path)
+    except KeyError as e:
+        logging.warning(e)  # FIXME
+        return None
+
+
+def from_commit_and_path(
+    commit: Commit,
+    path: Path,
+):
+
+    return from_blob(
+        _blob_by_path_in_commit(path, commit),
+        commit,
+        path,
+    )
+
+
+def from_blame(
+    blame: Blame, commit_by_object_id: Callable[[Oid], Commit]
+) -> Iterator[BlobRelation]:
     return pipe(
         map(lambda hunk: from_hunk(hunk, commit_by_object_id), blame),
         Q.unique(lambda blob: blob.id),
@@ -19,11 +62,13 @@ def from_blame(blame: Blame, commit_by_object_id: Callable[[Oid], Commit]):
     )
 
 
-def from_hunk(hunk: BlameHunk, commit_by_object_id: Callable[[Oid], Commit]):
+def from_hunk(
+    hunk: BlameHunk, commit_by_object_id: Callable[[Oid], Commit]
+) -> BlobRelation:
     assert hunk.orig_path is not None
 
-    return _blob_by_path_in_commit(
-        hunk.orig_path, commit_by_object_id(hunk.orig_commit_id)
+    return _blob_relation_by_path_in_commit(
+        Path(hunk.orig_path), commit_by_object_id(hunk.orig_commit_id)
     )
 
 
@@ -78,10 +123,6 @@ def from_blob(blob: Blob, commit: Commit, path: Path) -> BlobRelation:
     )
 
 
-def _blob_by_path_in_commit(path: Path | str, commit: Commit):
-    return next(_blob_by_path(path)(from_object(commit)))
-
-
 def _blob_by_path(
     path: Path | str,
 ) -> Callable[[Queryable[BlobRelation, Any]], Iterator[BlobRelation]]:
@@ -89,3 +130,11 @@ def _blob_by_path(
         Q.select(where=lambda blob: str(blob.path) == str(path), limit=1),
         Q.ungroup,
     )
+
+
+def _blob_relation_by_path_in_commit(path: Path | str, commit: Commit):
+    return next(_blob_by_path(path)(from_object(commit)))
+
+
+def _blob_by_path_in_commit(path: Path, commit: Commit):
+    return commit.tree[str(path)].peel(3)
